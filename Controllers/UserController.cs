@@ -43,7 +43,7 @@
             await _context.SaveChangesAsync();
 
             var token = Guid.NewGuid().ToString(); // Генерация токена (можно заменить на JWT)
-            var confirmationLink = $"https://localhost:5106/api/users/confirm-email?token={token}&email={user.Email}";
+            var confirmationLink = $"https://localhost:7100/api/users/confirm-email?token={token}&email={user.Email}";
 
             await _emailService.SendEmailAsync(
                 user.Email,
@@ -92,7 +92,7 @@
             if (user == null) return NotFound("User not found");
 
             var token = Guid.NewGuid().ToString(); // В реальном приложении лучше использовать JWT или другой способ.
-            var confirmationLink = $"https://localhost:5106/api/users/confirm-email?token={token}&email={email}";
+            var confirmationLink = $"https://localhost:7100/api/users/confirm-email?token={token}&email={email}";
 
             // Отправка письма
             await _emailService.SendEmailAsync(email, "Email Confirmation",
@@ -121,7 +121,7 @@
             if (user == null) return NotFound("User not found");
 
             var token = Guid.NewGuid().ToString(); // Генерация токена
-            var resetLink = $"https://localhost:5106/reset-password?token={token}&email={email}";
+            var resetLink = $"https://localhost:7100/reset-password?token={token}&email={email}";
 
             await _emailService.SendEmailAsync(
                 email,
