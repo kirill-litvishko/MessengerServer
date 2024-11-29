@@ -24,18 +24,21 @@
         {
             if (await _context.Users.AnyAsync(u => u.Username == request.Username))
                 return BadRequest("Username already exists");
+            if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+                return BadRequest("Email already in use");
 
             var user = new User
             {
                 Username = request.Username,
                 PasswordHash = HashPassword(request.Password),
+                Email = request.Email,
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            return Ok(new { user.Id, user.Username });
+            return Ok(new { user.Id, user.Username, user.Email });
         }
 
         [HttpPost("login")]
@@ -56,7 +59,7 @@
             if (user == null)
                 return NotFound();
 
-            return Ok(new { user.Id, user.Username, user.CreatedAt });
+            return Ok(new { user.Id, user.Username, user.Email, user.CreatedAt });
         }
 
         private string HashPassword(string password)
