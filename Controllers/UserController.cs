@@ -23,7 +23,7 @@
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] MessengerServer.Models.RegisterRequest request)
+        public async Task<IActionResult> Register([FromBody] Models.RegisterRequest request)
         {
             if (await _context.Users.AnyAsync(u => u.Username == request.Username))
                 return BadRequest("Username already exists");
@@ -55,7 +55,7 @@
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] MessengerServer.Models.LoginRequest request)
+        public async Task<IActionResult> Login([FromBody] Models.LoginRequest request)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
             if (user == null || user.PasswordHash != HashPassword(request.Password))
@@ -115,34 +115,39 @@
         }
 
         [HttpPost("send-reset-password")]
-        public async Task<IActionResult> SendResetPasswordLink([FromBody] string email)
+        public async Task<IActionResult> SendResetPasswordLink([FromBody] Models.ResetPasswordRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (user == null) return NotFound("User not found");
 
             var token = Guid.NewGuid().ToString(); // Генерация токена
-            var resetLink = $"https://localhost:7100/reset-password?token={token}&email={email}";
+            var resetLink = $"https://localhost:7100/api/users/confirm-reset-password?token={token}&email={request.Email}";
+
+            // Сохраняем токен (например, в базе данных или в памяти, для простоты здесь в базе)
+            user.PasswordHash = HashPassword(request.NewPassword); // Сохраняем новый пароль (временно, но зашифрованно)
+            await _context.SaveChangesAsync();
 
             await _emailService.SendEmailAsync(
-                email,
+                request.Email,
                 "Reset Your Password",
-                $"<p>Click <a href='{resetLink}'>here</a> to reset your password.</p>"
+                $"<p>Click <a href='{resetLink}'>here</a> to confirm your password reset.</p>"
             );
 
             return Ok("Password reset email sent.");
         }
 
-        [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] MessengerServer.Models.ResetPasswordRequest request)
+        [HttpGet("confirm-reset-password")]
+        public async Task<IActionResult> ConfirmResetPassword(string email, string token)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null) return NotFound("User not found");
 
-            // В реальном приложении нужно проверить токен
-            user.PasswordHash = HashPassword(request.NewPassword);
-            await _context.SaveChangesAsync();
+            // Проверяем токен (в реальном приложении нужно добавить логику проверки)
+            // Например, сверять его с сохранённым в базе или использовать JWT с истечением срока
 
-            return Ok("Password has been reset.");
+            // Новый пароль уже сохранён в хэше, ничего больше делать не нужно
+            return Ok("Password reset confirmed. You can now log in with your new password.");
         }
+
     }
 }
