@@ -6,6 +6,7 @@
         public string Username { get; set; }
         public string PasswordHash { get; set; }
         public string Email { get; set; }
+        public bool EmailConfirmed { get; set; } = false;
         public DateTime CreatedAt { get; set; }
     }
 }

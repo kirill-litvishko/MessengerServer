@@ -2,7 +2,7 @@
 {
     using MessengerServer.Data;
     using MessengerServer.Models;
-    using Microsoft.AspNetCore.Identity.Data;
+    using MessengerServer.Services;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.EntityFrameworkCore;
     using System.Security.Cryptography;
@@ -13,10 +13,12 @@
     public class UsersController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly EmailService _emailService;
 
-        public UsersController(AppDbContext context)
+        public UsersController(AppDbContext context, EmailService emailService)
         {
             _context = context;
+            _emailService = emailService;
         }
 
         [HttpPost("register")]
@@ -48,6 +50,9 @@
             if (user == null || user.PasswordHash != HashPassword(request.Password))
                 return Unauthorized("Invalid credentials");
 
+            if (!user.EmailConfirmed)
+                return Unauthorized("Please confirm your email before logging in.");
+
             // В реальном приложении сгенерируй JWT токен здесь
             return Ok(new { message = "Login successful" });
         }
@@ -68,6 +73,37 @@
             var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
             return Convert.ToBase64String(bytes);
         }
+
+        [HttpPost("send-confirmation")]
+        public async Task<IActionResult> SendEmailConfirmation([FromBody] string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null) return NotFound("User not found");
+
+            var token = Guid.NewGuid().ToString(); // В реальном приложении лучше использовать JWT или другой способ.
+            var confirmationLink = $"https://localhost:5106/api/users/confirm-email?token={token}&email={email}";
+
+            // Отправка письма
+            await _emailService.SendEmailAsync(email, "Email Confirmation",
+                $"<p>Click <a href='{confirmationLink}'>here</a> to confirm your email.</p>");
+
+            return Ok("Confirmation email sent.");
+        }
+
+        [HttpGet("confirm-email")]
+        public async Task<IActionResult> ConfirmEmail(string email, string token)
+        {
+            // В реальном приложении нужно проверить токен
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null) return NotFound("User not found");
+
+            user.EmailConfirmed = true;
+            await _context.SaveChangesAsync();
+
+            return Ok("Email confirmed.");
+        }
+
+
     }
 
 }
