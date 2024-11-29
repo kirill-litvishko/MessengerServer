@@ -3,6 +3,7 @@
     using MessengerServer.Data;
     using MessengerServer.Models;
     using MessengerServer.Services;
+    using Microsoft.AspNetCore.Identity.Data;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.EntityFrameworkCore;
     using System.Security.Cryptography;
@@ -34,11 +35,21 @@
                 Username = request.Username,
                 PasswordHash = HashPassword(request.Password),
                 Email = request.Email,
+                EmailConfirmed = false,
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
+
+            var token = Guid.NewGuid().ToString(); // Генерация токена (можно заменить на JWT)
+            var confirmationLink = $"https://localhost:5106/api/users/confirm-email?token={token}&email={user.Email}";
+
+            await _emailService.SendEmailAsync(
+                user.Email,
+                "Confirm Your Email",
+                $"<p>Click <a href='{confirmationLink}'>here</a> to confirm your email.</p>"
+            );
 
             return Ok(new { user.Id, user.Username, user.Email });
         }
@@ -103,7 +114,35 @@
             return Ok("Email confirmed.");
         }
 
+        [HttpPost("send-reset-password")]
+        public async Task<IActionResult> SendResetPasswordLink([FromBody] string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null) return NotFound("User not found");
 
+            var token = Guid.NewGuid().ToString(); // Генерация токена
+            var resetLink = $"https://localhost:5106/reset-password?token={token}&email={email}";
+
+            await _emailService.SendEmailAsync(
+                email,
+                "Reset Your Password",
+                $"<p>Click <a href='{resetLink}'>here</a> to reset your password.</p>"
+            );
+
+            return Ok("Password reset email sent.");
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            if (user == null) return NotFound("User not found");
+
+            // В реальном приложении нужно проверить токен
+            user.PasswordHash = HashPassword(request.NewPassword);
+            await _context.SaveChangesAsync();
+
+            return Ok("Password has been reset.");
+        }
     }
-
 }
