@@ -9,6 +9,11 @@
     using Org.BouncyCastle.Asn1.Ocsp;
     using System.Security.Cryptography;
     using System.Text;
+    using System.IdentityModel.Tokens.Jwt;
+    using System.Security.Claims;
+    using Microsoft.IdentityModel.Tokens;
+    using Microsoft.Extensions.Configuration;
+    using Microsoft.AspNetCore.Authorization;
 
     [ApiController]
     [Route("api/[controller]")]
@@ -17,12 +22,38 @@
         private readonly AppDbContext _context;
         private readonly EmailService _emailService;
         private readonly EncryptionService _encryptionService;
+        private readonly IConfiguration _configuration;
 
-        public UsersController(AppDbContext context, EmailService emailService, EncryptionService encryptionService)
+        public UsersController(AppDbContext context, EmailService emailService, EncryptionService encryptionService, IConfiguration configuration)
         {
             _context = context;
             _emailService = emailService;
             _encryptionService = encryptionService;
+            _configuration = configuration;
+        }
+
+        private string GenerateJwtToken(User user)
+        {
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Username),
+                new Claim(JwtRegisteredClaimNames.Email, _encryptionService.Decrypt(user.EncryptedEmail)),
+                new Claim("UserId", user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddHours(1),
+                signingCredentials: credentials
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
         [HttpPost("register")]
@@ -48,7 +79,7 @@
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            var token = Guid.NewGuid().ToString(); // Генерация токена (можно заменить на JWT)
+            var token = GenerateJwtToken(user);
             var confirmationLink = $"https://localhost:7100/api/users/confirm-email?token={token}&email={request.Email}";
 
             await _emailService.SendEmailAsync(
@@ -72,11 +103,11 @@
             if (!user.EmailConfirmed)
                 return Unauthorized("Please confirm your email before logging in.");
 
-            // В реальном приложении сгенерируй JWT токен здесь
             return Ok(new { message = "Login successful", email = decryptedEmail });
         }
 
         [HttpGet("{id}")]
+        [Authorize]
         public async Task<IActionResult> GetUser(int id)
         {
             var user = await _context.Users.FindAsync(id);
@@ -100,10 +131,9 @@
             var user = await _context.Users.FirstOrDefaultAsync(u => u.EncryptedEmail == encryptedEmail);
             if (user == null) return NotFound("User not found");
 
-            var token = Guid.NewGuid().ToString(); // В реальном приложении лучше использовать JWT или другой способ.
+            var token = GenerateJwtToken(user);
             var confirmationLink = $"https://localhost:7100/api/users/confirm-email?token={token}&email={email}";
 
-            // Отправка письма
             await _emailService.SendEmailAsync(email, "Email Confirmation",
                 $"<p>Click <a href='{confirmationLink}'>here</a> to confirm your email.</p>");
 
@@ -124,6 +154,7 @@
             return Ok("Email confirmed.");
         }
 
+        
         [HttpPost("send-reset-password")]
         public async Task<IActionResult> SendResetPasswordLink([FromBody] Models.ResetPasswordRequest request)
         {
@@ -131,11 +162,10 @@
             var user = await _context.Users.FirstOrDefaultAsync(u => u.EncryptedEmail == encryptedEmail);
             if (user == null) return NotFound("User not found");
 
-            var token = Guid.NewGuid().ToString(); // Генерация токена
+            var token = GenerateJwtToken(user);
             var resetLink = $"https://localhost:7100/api/users/confirm-reset-password?token={token}&email={request.Email}";
 
-            // Сохраняем токен (например, в базе данных или в памяти, для простоты здесь в базе)
-            user.PasswordHash = HashPassword(request.NewPassword); // Сохраняем новый пароль (временно, но зашифрованно)
+            user.PasswordHash = HashPassword(request.NewPassword);
             await _context.SaveChangesAsync();
 
             await _emailService.SendEmailAsync(
