@@ -6,6 +6,7 @@
     using Microsoft.AspNetCore.Identity.Data;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.EntityFrameworkCore;
+    using Org.BouncyCastle.Asn1.Ocsp;
     using System.Security.Cryptography;
     using System.Text;
 
@@ -15,11 +16,13 @@
     {
         private readonly AppDbContext _context;
         private readonly EmailService _emailService;
+        private readonly EncryptionService _encryptionService;
 
-        public UsersController(AppDbContext context, EmailService emailService)
+        public UsersController(AppDbContext context, EmailService emailService, EncryptionService encryptionService)
         {
             _context = context;
             _emailService = emailService;
+            _encryptionService = encryptionService;
         }
 
         [HttpPost("register")]
@@ -27,14 +30,17 @@
         {
             if (await _context.Users.AnyAsync(u => u.Username == request.Username))
                 return BadRequest("Username already exists");
-            if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+
+            var encryptedEmail = _encryptionService.Encrypt(request.Email);
+
+            if (await _context.Users.AnyAsync(u => u.EncryptedEmail == encryptedEmail))
                 return BadRequest("Email already in use");
 
             var user = new User
             {
                 Username = request.Username,
                 PasswordHash = HashPassword(request.Password),
-                Email = request.Email,
+                EncryptedEmail = encryptedEmail,
                 EmailConfirmed = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -43,15 +49,15 @@
             await _context.SaveChangesAsync();
 
             var token = Guid.NewGuid().ToString(); // Генерация токена (можно заменить на JWT)
-            var confirmationLink = $"https://localhost:7100/api/users/confirm-email?token={token}&email={user.Email}";
+            var confirmationLink = $"https://localhost:7100/api/users/confirm-email?token={token}&email={request.Email}";
 
             await _emailService.SendEmailAsync(
-                user.Email,
+                request.Email,
                 "Confirm Your Email",
                 $"<p>Click <a href='{confirmationLink}'>here</a> to confirm your email.</p>"
             );
 
-            return Ok(new { user.Id, user.Username, user.Email });
+            return Ok(new { user.Id, user.Username });
         }
 
         [HttpPost("login")]
@@ -61,11 +67,13 @@
             if (user == null || user.PasswordHash != HashPassword(request.Password))
                 return Unauthorized("Invalid credentials");
 
+            var decryptedEmail = _encryptionService.Decrypt(user.EncryptedEmail);
+
             if (!user.EmailConfirmed)
                 return Unauthorized("Please confirm your email before logging in.");
 
             // В реальном приложении сгенерируй JWT токен здесь
-            return Ok(new { message = "Login successful" });
+            return Ok(new { message = "Login successful", email = decryptedEmail });
         }
 
         [HttpGet("{id}")]
@@ -75,7 +83,7 @@
             if (user == null)
                 return NotFound();
 
-            return Ok(new { user.Id, user.Username, user.Email, user.CreatedAt });
+            return Ok(new { user.Id, user.Username, user.EncryptedEmail, user.CreatedAt });
         }
 
         private string HashPassword(string password)
@@ -88,7 +96,8 @@
         [HttpPost("send-confirmation")]
         public async Task<IActionResult> SendEmailConfirmation([FromBody] string email)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var encryptedEmail = _encryptionService.Encrypt(email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.EncryptedEmail == encryptedEmail);
             if (user == null) return NotFound("User not found");
 
             var token = Guid.NewGuid().ToString(); // В реальном приложении лучше использовать JWT или другой способ.
@@ -104,8 +113,9 @@
         [HttpGet("confirm-email")]
         public async Task<IActionResult> ConfirmEmail(string email, string token)
         {
-            // В реальном приложении нужно проверить токен
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var encryptedEmail = _encryptionService.Encrypt(email);
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.EncryptedEmail == encryptedEmail);
             if (user == null) return NotFound("User not found");
 
             user.EmailConfirmed = true;
@@ -117,7 +127,8 @@
         [HttpPost("send-reset-password")]
         public async Task<IActionResult> SendResetPasswordLink([FromBody] Models.ResetPasswordRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            var encryptedEmail = _encryptionService.Encrypt(request.Email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.EncryptedEmail == encryptedEmail);
             if (user == null) return NotFound("User not found");
 
             var token = Guid.NewGuid().ToString(); // Генерация токена
@@ -139,7 +150,8 @@
         [HttpGet("confirm-reset-password")]
         public async Task<IActionResult> ConfirmResetPassword(string email, string token)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var encryptedEmail = _encryptionService.Encrypt(email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.EncryptedEmail == encryptedEmail);
             if (user == null) return NotFound("User not found");
 
             // Проверяем токен (в реальном приложении нужно добавить логику проверки)
