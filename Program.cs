@@ -35,16 +35,17 @@ builder.Services.AddInMemoryRateLimiting();
 
 var app = builder.Build();
 
+app.UseIpRateLimiting();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseIpRateLimiting();
-
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+builder.Logging.AddConsole();
 
 app.Run();
