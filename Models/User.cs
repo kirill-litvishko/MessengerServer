@@ -8,5 +8,8 @@
         public string EncryptedEmail { get; set; }
         public bool EmailConfirmed { get; set; } = false;
         public DateTime CreatedAt { get; set; }
+
+        public ICollection<Chat> Chats { get; set; }
+        public ICollection<Message> Messages { get; set; }
     }
 }
