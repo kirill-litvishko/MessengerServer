@@ -49,7 +49,7 @@
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(1),
+                expires: DateTime.UtcNow.AddDays(30),
                 signingCredentials: credentials
             );
 
@@ -191,5 +191,15 @@
             return Ok("Password reset confirmed. You can now log in with your new password.");
         }
 
+        [Authorize]
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile()
+        {
+            var userId = User.FindFirst("UserId")?.Value;
+            var user = await _context.Users.FindAsync(int.Parse(userId));
+            if (user == null) return NotFound();
+
+            return Ok(new { user.Username, user.CreatedAt });
+        }
     }
 }
