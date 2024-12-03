@@ -191,15 +191,26 @@
             return Ok("Password reset confirmed. You can now log in with your new password.");
         }
 
-        [Authorize]
-        [HttpGet("profile")]
-        public async Task<IActionResult> GetProfile()
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchUsers(string username)
         {
-            var userId = User.FindFirst("UserId")?.Value;
-            var user = await _context.Users.FindAsync(int.Parse(userId));
-            if (user == null) return NotFound();
+            if (string.IsNullOrWhiteSpace(username))
+                return BadRequest("Username is required for search.");
 
-            return Ok(new { user.Username, user.CreatedAt });
+            var users = await _context.Users
+                .Where(u => u.Username.Contains(username)) // Пошук по частковому співпадінню
+                .Select(u => new
+                {
+                    u.Id,
+                    u.Username,
+                    u.CreatedAt
+                })
+                .ToListAsync();
+
+            if (!users.Any())
+                return NotFound("No users found.");
+
+            return Ok(users);
         }
     }
 }

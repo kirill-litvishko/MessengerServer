@@ -10,10 +10,8 @@
 
         public EncryptionService()
         {
-            // Используй 32-байтный ключ для AES-256
-            _key = Encoding.UTF8.GetBytes("12345678901234567890123456789012"); // Ровно 32 символа
+            _key = Encoding.UTF8.GetBytes("12345678901234567890123456789012");
 
-            // 16-байтный IV
             _iv = Encoding.UTF8.GetBytes("1234567890123456");
         }
 
