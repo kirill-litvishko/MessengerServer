@@ -117,6 +117,22 @@
             return Ok(new { user.Id, user.Username, user.EncryptedEmail, user.CreatedAt });
         }
 
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> GetUsers()
+        {
+            var users = await _context.Users
+                .Select(user => new
+                {
+                    user.Id,
+                    user.Username,
+                    user.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(users);
+        }
+
         private string HashPassword(string password)
         {
             using var sha256 = SHA256.Create();
@@ -184,10 +200,6 @@
             var user = await _context.Users.FirstOrDefaultAsync(u => u.EncryptedEmail == encryptedEmail);
             if (user == null) return NotFound("User not found");
 
-            // Проверяем токен (в реальном приложении нужно добавить логику проверки)
-            // Например, сверять его с сохранённым в базе или использовать JWT с истечением срока
-
-            // Новый пароль уже сохранён в хэше, ничего больше делать не нужно
             return Ok("Password reset confirmed. You can now log in with your new password.");
         }
 

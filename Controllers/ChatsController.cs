@@ -82,5 +82,22 @@ namespace MessengerServer.Controllers
             return Ok(messages);
         }
 
+        [HttpPost("check")]
+        public async Task<IActionResult> CheckExistingChat([FromBody] int[] userIds)
+        {
+            // Отримуємо всі чати
+            var chat = await _context.Chats
+                .Include(c => c.Users)
+                .FirstOrDefaultAsync(c => c.Users.All(u => userIds.Contains(u.Id)) && c.Users.Count == userIds.Length);
+
+            if (chat == null)
+            {
+                // Якщо чат не знайдено, повертаємо 404
+                return NotFound("Chat not found.");
+            }
+
+            return Ok(new { ChatId = chat.Id });
+        }
+
     }
 }
